@@ -1,0 +1,23 @@
+services:
+  backend:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data
+      - ${OBSIDIAN_VAULT_PATH:-/mnt/e/workspace/obsidian-vault}:/vault
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - DB_PATH=/app/data/stock.db
+      - OBSIDIAN_VAULT_PATH=/vault
+    restart: unless-stopped
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "8501:8501"
+    depends_on:
+      - backend
+    environment:
+      - API_BASE=http://backend:8000/api
+    restart: unless-stopped
