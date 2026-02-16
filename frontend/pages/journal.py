@@ -3,7 +3,7 @@
 import httpx
 import streamlit as st
 
-API_BASE = "http://localhost:8000/api"
+from config import API_BASE
 
 st.title("📓 トレードジャーナル")
 
