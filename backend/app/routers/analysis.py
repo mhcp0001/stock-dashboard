@@ -1,4 +1,5 @@
-from fastapi import APIRouter
+import anthropic
+from fastapi import APIRouter, HTTPException
 
 from app.models.schemas import AnalysisRequest, AnalysisResponse, TechnicalIndicators
 from app.services import llm, stock_data, technical
@@ -19,11 +20,18 @@ async def chat(request: AnalysisRequest):
             indicators = TechnicalIndicators(ticker=request.ticker, **ind_dict)
             context = llm.build_context(ticker=request.ticker, indicators=ind_dict)
 
-    response_text, conv_id = llm.chat(
-        message=request.message,
-        conversation_id=request.conversation_id,
-        context=context,
-    )
+    try:
+        response_text, conv_id = llm.chat(
+            message=request.message,
+            conversation_id=request.conversation_id,
+            context=context,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+    except anthropic.AuthenticationError:
+        raise HTTPException(status_code=503, detail="Invalid ANTHROPIC_API_KEY")
+    except anthropic.APIError as e:
+        raise HTTPException(status_code=502, detail=f"Claude API error: {e.message}")
 
     return AnalysisResponse(
         response=response_text,

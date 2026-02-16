@@ -1,6 +1,9 @@
 from contextlib import asynccontextmanager
 
+from dotenv import load_dotenv
 from fastapi import FastAPI
+
+load_dotenv()
 
 from app.db.database import create_tables
 from app.routers import analysis, market, trade, watchlist
