@@ -40,16 +40,20 @@ def calculate_indicators(df: pd.DataFrame) -> dict:
         result["rsi_14"] = round(float(rsi.iloc[latest]), 2)
 
     if macd_df is not None and not macd_df.empty:
-        cols = macd_df.columns
-        result["macd"] = round(float(macd_df[cols[0]].iloc[latest]), 2)
-        result["macd_signal"] = round(float(macd_df[cols[1]].iloc[latest]), 2)
-        result["macd_hist"] = round(float(macd_df[cols[2]].iloc[latest]), 2)
+        macd_col = [c for c in macd_df.columns if c.startswith("MACD_")][0]
+        hist_col = [c for c in macd_df.columns if c.startswith("MACDh_")][0]
+        signal_col = [c for c in macd_df.columns if c.startswith("MACDs_")][0]
+        result["macd"] = round(float(macd_df[macd_col].iloc[latest]), 2)
+        result["macd_signal"] = round(float(macd_df[signal_col].iloc[latest]), 2)
+        result["macd_hist"] = round(float(macd_df[hist_col].iloc[latest]), 2)
 
     if bb_df is not None and not bb_df.empty:
-        cols = bb_df.columns
-        bb_lower = float(bb_df[cols[0]].iloc[latest])
-        bb_mid = float(bb_df[cols[1]].iloc[latest])
-        bb_upper = float(bb_df[cols[2]].iloc[latest])
+        lower_col = [c for c in bb_df.columns if c.startswith("BBL_")][0]
+        mid_col = [c for c in bb_df.columns if c.startswith("BBM_")][0]
+        upper_col = [c for c in bb_df.columns if c.startswith("BBU_")][0]
+        bb_lower = float(bb_df[lower_col].iloc[latest])
+        bb_mid = float(bb_df[mid_col].iloc[latest])
+        bb_upper = float(bb_df[upper_col].iloc[latest])
         current_price = float(close.iloc[latest])
         bb_width = bb_upper - bb_lower
 
