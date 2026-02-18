@@ -1,0 +1,27 @@
+[Unit]
+Description=Stock Dashboard Backend (FastAPI)
+After=network.target
+Wants=stock-dashboard-frontend.service
+
+[Service]
+Type=exec
+User=stock-dashboard
+Group=stock-dashboard
+WorkingDirectory=/opt/stock-dashboard/backend
+ExecStart=/opt/stock-dashboard/backend/.venv/bin/uvicorn app.main:app \
+    --host 127.0.0.1 \
+    --port 8000
+Restart=on-failure
+RestartSec=5
+
+EnvironmentFile=/opt/stock-dashboard/.env
+
+# Hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/stock-dashboard/data
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
