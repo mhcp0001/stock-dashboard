@@ -1,13 +1,21 @@
-"""Claude API integration for stock analysis."""
+"""LLM integration for stock analysis.
+
+Supports multiple providers via LLM_PROVIDER env var:
+- "gemini" (default): Google Gemini API
+- "anthropic": Anthropic Claude API
+"""
 
 import os
 import uuid
 
 import anthropic
+import google.generativeai as genai
 
-_client: anthropic.Anthropic | None = None
 # In-memory conversation store: {conversation_id: [messages]}
 _conversations: dict[str, list[dict]] = {}
+
+_anthropic_client: anthropic.Anthropic | None = None
+_gemini_model: genai.GenerativeModel | None = None
 
 SYSTEM_PROMPT = """あなたは株式スイングトレード（数日〜数週間の短中期売買）の分析アシスタントです。
 
@@ -32,14 +40,33 @@ SYSTEM_PROMPT = """あなたは株式スイングトレード（数日〜数週�
 """
 
 
-def _get_client() -> anthropic.Anthropic:
-    global _client
-    if _client is None:
+def get_provider() -> str:
+    """Get the configured LLM provider."""
+    return os.getenv("LLM_PROVIDER", "gemini").lower()
+
+
+def _get_anthropic_client() -> anthropic.Anthropic:
+    global _anthropic_client
+    if _anthropic_client is None:
         api_key = os.getenv("ANTHROPIC_API_KEY")
         if not api_key:
             raise ValueError("ANTHROPIC_API_KEY is not set")
-        _client = anthropic.Anthropic(api_key=api_key)
-    return _client
+        _anthropic_client = anthropic.Anthropic(api_key=api_key)
+    return _anthropic_client
+
+
+def _get_gemini_model(model: str = "gemini-2.5-flash") -> genai.GenerativeModel:
+    global _gemini_model
+    if _gemini_model is None:
+        api_key = os.getenv("GEMINI_API_KEY")
+        if not api_key:
+            raise ValueError("GEMINI_API_KEY is not set")
+        genai.configure(api_key=api_key)
+        _gemini_model = genai.GenerativeModel(
+            model_name=model,
+            system_instruction=SYSTEM_PROMPT,
+        )
+    return _gemini_model
 
 
 def build_context(ticker: str | None = None, indicators: dict | None = None, trade_stats: dict | None = None) -> str:
@@ -70,27 +97,16 @@ def build_context(ticker: str | None = None, indicators: dict | None = None, tra
     return "\n".join(parts)
 
 
-def chat(
+def _chat_anthropic(
     message: str,
-    conversation_id: str | None = None,
-    context: str = "",
-    model: str = "claude-sonnet-4-5-20250929",
-) -> tuple[str, str]:
-    """Send a message to Claude and get a response.
+    conversation_id: str,
+    context: str,
+    model: str,
+) -> str:
+    """Send a message via Anthropic Claude API."""
+    client = _get_anthropic_client()
 
-    Returns (response_text, conversation_id).
-    """
-    client = _get_client()
-
-    if not conversation_id:
-        conversation_id = str(uuid.uuid4())
-
-    if conversation_id not in _conversations:
-        _conversations[conversation_id] = []
-
-    # Prepend context to user message if available
     full_message = f"{context}\n\n---\n\n{message}" if context else message
-
     _conversations[conversation_id].append({"role": "user", "content": full_message})
 
     response = client.messages.create(
@@ -102,5 +118,69 @@ def chat(
 
     assistant_text = response.content[0].text
     _conversations[conversation_id].append({"role": "assistant", "content": assistant_text})
+    return assistant_text
 
-    return assistant_text, conversation_id
+
+def _chat_gemini(
+    message: str,
+    conversation_id: str,
+    context: str,
+    model: str,
+) -> str:
+    """Send a message via Google Gemini API."""
+    gemini_model = _get_gemini_model(model)
+
+    full_message = f"{context}\n\n---\n\n{message}" if context else message
+
+    # Convert existing conversation history to Gemini format
+    history = []
+    for msg in _conversations[conversation_id]:
+        role = "model" if msg["role"] == "assistant" else msg["role"]
+        history.append({"role": role, "parts": [msg["content"]]})
+
+    chat_session = gemini_model.start_chat(history=history)
+    response = chat_session.send_message(full_message)
+
+    assistant_text = response.text
+    # Store in common format for consistency
+    _conversations[conversation_id].append({"role": "user", "content": full_message})
+    _conversations[conversation_id].append({"role": "assistant", "content": assistant_text})
+    return assistant_text
+
+
+# Default models per provider
+_DEFAULT_MODELS = {
+    "anthropic": "claude-sonnet-4-5-20250929",
+    "gemini": "gemini-2.5-flash",
+}
+
+
+def chat(
+    message: str,
+    conversation_id: str | None = None,
+    context: str = "",
+    model: str | None = None,
+) -> tuple[str, str]:
+    """Send a message to the configured LLM and get a response.
+
+    Returns (response_text, conversation_id).
+    """
+    provider = get_provider()
+
+    if model is None:
+        model = _DEFAULT_MODELS.get(provider, _DEFAULT_MODELS["gemini"])
+
+    if not conversation_id:
+        conversation_id = str(uuid.uuid4())
+
+    if conversation_id not in _conversations:
+        _conversations[conversation_id] = []
+
+    if provider == "anthropic":
+        text = _chat_anthropic(message, conversation_id, context, model)
+    elif provider == "gemini":
+        text = _chat_gemini(message, conversation_id, context, model)
+    else:
+        raise ValueError(f"Unsupported LLM_PROVIDER: {provider}")
+
+    return text, conversation_id
