@@ -7,7 +7,9 @@ services:
       - ./data:/app/data
       - ${OBSIDIAN_VAULT_PATH:-/mnt/e/workspace/obsidian-vault}:/vault
     environment:
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - LLM_PROVIDER=${LLM_PROVIDER:-gemini}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - DB_PATH=/app/data/stock.db
       - OBSIDIAN_VAULT_PATH=/vault
     restart: unless-stopped

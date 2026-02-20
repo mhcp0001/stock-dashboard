@@ -1,8 +1,14 @@
 # /opt/stock-dashboard/.env
 # Backend environment variables (loaded via EnvironmentFile in systemd)
 
-# Required: Anthropic API Key (Ansible Vault managed)
-ANTHROPIC_API_KEY=sk-ant-api03-xxxxx
+# LLM Provider: "gemini" (default) or "anthropic"
+LLM_PROVIDER=gemini
+
+# Gemini API Key (https://aistudio.google.com/) - Ansible Vault managed
+GEMINI_API_KEY=AIza-xxxxx
+
+# Anthropic API Key (https://console.anthropic.com/settings/keys) - Ansible Vault managed
+# ANTHROPIC_API_KEY=sk-ant-api03-xxxxx
 
 # SQLite database path
 DB_PATH=/opt/stock-dashboard/data/stock.db

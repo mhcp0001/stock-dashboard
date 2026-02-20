@@ -9,13 +9,14 @@ import os
 import uuid
 
 import anthropic
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 
 # In-memory conversation store: {conversation_id: [messages]}
 _conversations: dict[str, list[dict]] = {}
 
 _anthropic_client: anthropic.Anthropic | None = None
-_gemini_model: genai.GenerativeModel | None = None
+_gemini_client: genai.Client | None = None
 
 SYSTEM_PROMPT = """あなたは株式スイングトレード（数日〜数週間の短中期売買）の分析アシスタントです。
 
@@ -55,18 +56,14 @@ def _get_anthropic_client() -> anthropic.Anthropic:
     return _anthropic_client
 
 
-def _get_gemini_model(model: str = "gemini-2.5-flash") -> genai.GenerativeModel:
-    global _gemini_model
-    if _gemini_model is None:
+def _get_gemini_client() -> genai.Client:
+    global _gemini_client
+    if _gemini_client is None:
         api_key = os.getenv("GEMINI_API_KEY")
         if not api_key:
             raise ValueError("GEMINI_API_KEY is not set")
-        genai.configure(api_key=api_key)
-        _gemini_model = genai.GenerativeModel(
-            model_name=model,
-            system_instruction=SYSTEM_PROMPT,
-        )
-    return _gemini_model
+        _gemini_client = genai.Client(api_key=api_key)
+    return _gemini_client
 
 
 def build_context(ticker: str | None = None, indicators: dict | None = None, trade_stats: dict | None = None) -> str:
@@ -128,7 +125,7 @@ def _chat_gemini(
     model: str,
 ) -> str:
     """Send a message via Google Gemini API."""
-    gemini_model = _get_gemini_model(model)
+    client = _get_gemini_client()
 
     full_message = f"{context}\n\n---\n\n{message}" if context else message
 
@@ -136,10 +133,16 @@ def _chat_gemini(
     history = []
     for msg in _conversations[conversation_id]:
         role = "model" if msg["role"] == "assistant" else msg["role"]
-        history.append({"role": role, "parts": [msg["content"]]})
+        history.append(types.Content(role=role, parts=[types.Part.from_text(text=msg["content"])]))
 
-    chat_session = gemini_model.start_chat(history=history)
-    response = chat_session.send_message(full_message)
+    response = client.models.generate_content(
+        model=model,
+        contents=history + [types.Content(role="user", parts=[types.Part.from_text(text=full_message)])],
+        config=types.GenerateContentConfig(
+            system_instruction=SYSTEM_PROMPT,
+            max_output_tokens=2048,
+        ),
+    )
 
     assistant_text = response.text
     # Store in common format for consistency
